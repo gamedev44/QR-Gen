@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="Dynamic 3-Layer QR Code Generator with Opacity Control and Image Background." />
+  <meta name="theme-color" content="#121212" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <title>QR-Gen</title>
+  <script src="https://cdn.jsdelivr.net/npm/qrcode/build/qrcode.min.js"></script>
+  <style>
+    * {
+  box-sizing: border-box;
+  touch-action: manipulation;
+}
+
+body {
+  margin: 0;
+  background: #121212;
+  color: #fff;
+  font-family: 'Segoe UI', sans-serif;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 1.5rem;
+}
+
+h1 {
+  font-size: 2rem;
+  margin: 1.5rem 0 1rem;
+  text-align: center;
+  color: #ffffff;
+  text-shadow: 0 2px 5px rgba(0, 0, 0, 0.4);
+}
+
+input[type="text"],
+input[type="file"],
+input[type="range"] {
+  appearance: none;
+  width: 100%;
+  max-width: 400px;
+  margin: 0.5rem 0;
+  padding: 0.75rem 1rem;
+  font-size: 1rem;
+  border: none;
+  border-radius: 14px;
+  background: #2c2c2c;
+  color: #fff;
+  box-shadow: inset 0 2px 4px rgba(0,0,0,0.2);
+  outline: none;
+  transition: 0.3s;
+}
+
+input[type="text"]:focus,
+input[type="file"]:focus,
+input[type="range"]:focus {
+  background: #333;
+}
+
+label {
+  font-size: 0.95rem;
+  margin: 0.75rem 0 0.25rem;
+  color: #ccc;
+  display: block;
+}
+
+#output {
+  position: relative;
+  width: 100%;
+  max-width: 320px;
+  aspect-ratio: 1 / 1;
+  margin: 1.5rem 0;
+  border-radius: 20px;
+  overflow: hidden;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+}
+
+canvas,
+#bg-img {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+#qr-white { z-index: 0; }
+#bg-img    { z-index: 1; }
+#qr-black { z-index: 2; }
+
+button,
+a {
+  margin: 1rem 0.5rem;
+  padding: 0.75rem 1.5rem;
+  font-size: 1rem;
+  border: none;
+  border-radius: 999px;
+  background: linear-gradient(to right, #42a5f5, #1e88e5);
+  color: white;
+  box-shadow: 0 4px 10px rgba(33,150,243,0.4);
+  cursor: pointer;
+  transition: all 0.25s ease;
+  text-decoration: none;
+  display: inline-block;
+}
+
+button:hover,
+a:hover {
+  background: linear-gradient(to right, #2196f3, #1565c0);
+  box-shadow: 0 6px 12px rgba(33,150,243,0.6);
+  transform: translateY(-2px);
+}
+
+#about-modal {
+  position: fixed;
+  top: 0; left: 0;
+  right: 0; bottom: 0;
+  background: rgba(0,0,0,0.85);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 9999;
+}
+
+#about-content {
+  background: #1e1e1e;
+  padding: 1.5rem;
+  border-radius: 16px;
+  max-width: 90%;
+  text-align: center;
+  color: #fff;
+  box-shadow: 0 10px 20px rgba(0,0,0,0.4);
+}
+
+#about-content h2 {
+  margin-top: 0;
+  font-size: 1.25rem;
+  margin-bottom: 1rem;
+}
+
+@media (max-width: 500px) {
+  h1 {
+    font-size: 1.5rem;
+  }
+
+  button,
+  a {
+    font-size: 0.95rem;
+    padding: 0.65rem 1.2rem;
+  }
+
+  input[type="text"],
+  input[type="file"],
+  input[type="range"] {
+    font-size: 0.95rem;
+  }
+}
+
+  </style>
+</head>
+<body>
+  <div id="about-modal">
+    <div id="about-content">
+      <h2>Welcome to QR-Gen</h2>
+      <h3>Made by: Risk</h3>
+      <p>This tool lets you generate a 3-layer QR code with an image background and adjustable opacities. Works on PC and mobile.</p>
+      <label><input type="checkbox" id="dont-show"> Don't show again</label><br><br>
+      <button onclick="closeAbout()">Got it</button>
+    </div>
+  </div>
+
+  <h1>QR-Gen</h1>
+  <input type="text" id="text" placeholder="Enter text" />
+  <input type="file" id="img-upload" accept="image/*" />
+  <label>White Layer Opacity:</label>
+  <input type="range" id="white-opacity" min="0" max="1" step="0.05" value="0.5" />
+  <label>Image Opacity:</label>
+  <input type="range" id="bg-opacity" min="0" max="1" step="0.05" value="0.5" />
+  <div id="output">
+    <canvas id="qr-white" width="256" height="256"></canvas>
+    <img id="bg-img" />
+    <canvas id="qr-black" width="256" height="256"></canvas>
+  </div>
+  <button onclick="snapshot()">Snapshot</button>
+  <a id="download-link" style="display: none;">Download Image</a>
+
+  <script>
+    const textInput = document.getElementById('text');
+    const qrWhite = document.getElementById('qr-white');
+    const qrBlack = document.getElementById('qr-black');
+    const ctxWhite = qrWhite.getContext('2d');
+    const ctxBlack = qrBlack.getContext('2d');
+    const bgImg = document.getElementById('bg-img');
+    const imgUpload = document.getElementById('img-upload');
+    const whiteOpacitySlider = document.getElementById('white-opacity');
+    const bgOpacitySlider = document.getElementById('bg-opacity');
+
+    function drawQR(text) {
+      QRCode.toDataURL(text || ' ', { width: 256, margin: 1 }, (err, url) => {
+        if (err) return console.error(err);
+        const img = new Image();
+        img.onload = () => {
+          ctxWhite.clearRect(0, 0, 256, 256);
+          ctxWhite.drawImage(img, 0, 0);
+          const whiteData = ctxWhite.getImageData(0, 0, 256, 256);
+          for (let i = 0; i < whiteData.data.length; i += 4) {
+            const [r, g, b] = [whiteData.data[i], whiteData.data[i+1], whiteData.data[i+2]];
+            whiteData.data[i+3] = (r === 255 && g === 255 && b === 255) ? whiteOpacitySlider.value * 255 : 0;
+          }
+          ctxWhite.putImageData(whiteData, 0, 0);
+
+          ctxBlack.clearRect(0, 0, 256, 256);
+          ctxBlack.drawImage(img, 0, 0);
+          const blackData = ctxBlack.getImageData(0, 0, 256, 256);
+          for (let i = 0; i < blackData.data.length; i += 4) {
+            const [r, g, b] = [blackData.data[i], blackData.data[i+1], blackData.data[i+2]];
+            blackData.data[i+3] = (r === 0 && g === 0 && b === 0) ? 255 : 0;
+          }
+          ctxBlack.putImageData(blackData, 0, 0);
+        };
+        img.src = url;
+      });
+    }
+
+    textInput.addEventListener('input', () => drawQR(textInput.value));
+    whiteOpacitySlider.addEventListener('input', () => drawQR(textInput.value));
+    bgOpacitySlider.addEventListener('input', () => {
+      bgImg.style.opacity = bgOpacitySlider.value;
+    });
+
+    imgUpload.addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (file) {
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          bgImg.src = event.target.result;
+        };
+        reader.readAsDataURL(file);
+      }
+    });
+
+    function snapshot() {
+      const snapshotCanvas = document.createElement('canvas');
+      snapshotCanvas.width = 256;
+      snapshotCanvas.height = 256;
+      const ctx = snapshotCanvas.getContext('2d');
+
+      ctx.drawImage(qrWhite, 0, 0);
+      ctx.globalAlpha = bgOpacitySlider.value;
+      ctx.drawImage(bgImg, 0, 0, 256, 256);
+      ctx.globalAlpha = 1;
+      ctx.drawImage(qrBlack, 0, 0);
+
+      const link = document.getElementById('download-link');
+      link.href = snapshotCanvas.toDataURL("image/png");
+      link.download = "qr_snapshot.png";
+      link.style.display = "inline";
+      link.textContent = "Download Image";
+    }
+
+    function closeAbout() {
+      if (document.getElementById('dont-show').checked) {
+        localStorage.setItem("hideAbout", "1");
+      }
+      document.getElementById('about-modal').style.display = "none";
+    }
+
+    if (localStorage.getItem("hideAbout") === "1") {
+      document.getElementById('about-modal').style.display = "none";
+    }
+
+    drawQR(' ');
+  </script>
+</body>
+</html>
